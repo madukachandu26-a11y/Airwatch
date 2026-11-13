@@ -1,0 +1,28 @@
+AirWatch – AI Prompts Used During Project Development
+
+Project: Real-Time Air Quality Monitoring and Anomaly Detection Using Apache Kafka
+
+Selected Cities: Berlin, Bremen, Hamburg, Hannover, Kiel, Munich
+
+ 1. I want to develop a university project using Python, Apache Kafka, and real-world data. Suggest a practical real-time data processing project related to environmental monitoring. Explain the objectives, technologies, architecture, and expected outcomes.
+
+2. Define the scope and requirements for an Air Quality Monitoring and Anomaly Detection system covering only Berlin, Bremen, Hamburg, Hannover, Kiel, and Munich. Include functional and non-functional requirements.
+
+3. Design an end-to-end architecture for AirWatch using Sensor.Community live data, a Python producer, Apache Kafka, a Python consumer, SQLite, and Streamlit. Explain the responsibilities of each component and show the complete data flow.
+
+4. Help me collect historical air quality measurements for Berlin, Bremen, Hamburg, Hannover, Kiel, and Munich from 12 May 2026 to 10 November 2026 using Sensor.Community archive data. Explain how to download, combine, and organize the records.
+  
+5.Analyze the collected historical measurements for the six selected cities. Identify missing values, duplicate records, negative readings, and suspicious extreme PM2.5 and PM10 values. Keep suspicious records separately and generate a cleaned dataset.
+
+6. Create a Python Kafka producer that collects live Sensor.Community measurements from the six selected cities and publishes structured messages to the air-quality Kafka topic. Include sensor IDs, timestamps, PM2.5, PM10, temperature, and humidity when available. Include error handling and duplicate event tracking.
+
+7. Design an SQLite database for AirWatch to store sensor measurements, validation results, pollution alerts, and streaming performance metrics. Include suitable tables, primary keys, indexes, and duplicate protection.
+
+8. Build an interactive Streamlit dashboard for Berlin, Bremen, Hamburg, Hannover, Kiel, and Munich. Display current pollution status, last updated time, historical pollution information, sensor locations, anomaly alerts, data quality, and streaming performance.
+
+9.Integrate historical and real-time air quality information for the six selected cities. Calculate daily historical averages and classify pollution conditions as Low, Normal, or High. Keep historical data separate from the live Kafka pipeline and use caching to improve dashboard performance.
+
+10. Evaluate AirWatch's Kafka streaming performance by measuring message throughput, consumer processing latency, live delivery latency, replay delay, duplicate messages, and Kafka consumer lag. Explain how each metric is calculated and displayed.
+  
+11. Prepare the final AirWatch project documentation, including the project overview, objectives, architecture diagram, technologies, data sources, six selected cities, implementation details, dashboard features, performance evaluation, limitations, and future improvements. Review the project files and prepare the repository for submission on the GitHub final branch.
+  
