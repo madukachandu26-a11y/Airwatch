@@ -1,0 +1,24 @@
+/Users/chandu/Desktop/Airwatch/consumer.py:72: DeprecationWarning: value_deserializer does not implement kafka.serializer.Deserializer
+  consumer = KafkaConsumer(
+
+AirWatch consumer started.
+Kafka: localhost:9092
+Topic: air-quality
+Consumer group: airwatch-consumer-realtime
+Selected sensors: 30
+Commit batch size: 1000
+Live message window: 300.0 seconds
+Waiting for Kafka messages...
+
+Pending completed messages committed.
+
+--- FINAL PROCESSING SUMMARY ---
+Processed selected messages: 0
+Stored: 0
+Duplicates: 0
+Skipped other sensors: 0
+Skipped unsupported/invalid: 0
+Valid: 0
+Suspicious: 0
+Invalid: 0
+Session average throughput: 0.00 messages/second

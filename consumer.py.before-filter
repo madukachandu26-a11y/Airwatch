@@ -1,0 +1,259 @@
+
+import json
+import time
+from collections import deque
+from kafka import KafkaConsumer
+
+from database import (
+    initialize_db,
+    save_measurement,
+    save_alert,
+    save_quality_check
+)
+
+from detector import detect_anomaly
+from data_quality import validate_measurement
+from performance import (
+    initialize_performance_db,
+    record_performance
+)
+
+KAFKA_SERVER = "localhost:9092"
+TOPIC = "air-quality"
+
+
+def start_consumer():
+
+    initialize_db()
+    initialize_performance_db()
+
+    consumer = KafkaConsumer(
+        TOPIC,
+        bootstrap_servers=KAFKA_SERVER,
+       group_id="airwatch-consumer-realtime",
+auto_offset_reset="latest",
+        enable_auto_commit=False,
+        value_deserializer=lambda message: json.loads(
+            message.decode("utf-8")
+        )
+    )
+
+    print("AirWatch consumer started.")
+    print("Real-time performance monitoring enabled.")
+    print("Waiting for Kafka messages...")
+
+    processed = 0
+    inserted = 0
+    duplicates = 0
+    valid_count = 0
+    suspicious_count = 0
+    invalid_count = 0
+
+    session_start = time.perf_counter()
+
+    # Completion timestamps for rolling throughput
+    recent_completions = deque()
+
+    try:
+        for message in consumer:
+
+            message_start = time.perf_counter()
+            event = message.value
+
+            required_fields = [
+                "event_id",
+                "sensor_id",
+                "timestamp",
+                "country",
+                "latitude",
+                "longitude",
+                "parameter",
+                "value",
+                "sensor_type"
+            ]
+
+            if not isinstance(event, dict) or not all(
+                field in event for field in required_fields
+            ):
+                print("Invalid message structure skipped:", event)
+                consumer.commit()
+                continue
+
+            if event["parameter"] not in [
+                "PM10", "PM2.5", "temperature", "humidity"
+            ]:
+                print("Unsupported measurement skipped:", event)
+                consumer.commit()
+                continue
+
+            # Data quality validation
+            quality_result = validate_measurement(event)
+
+            # Preserve original measurement
+            was_inserted = save_measurement(event)
+
+            # Store quality result
+            save_quality_check(event, quality_result)
+
+            processed += 1
+
+            if was_inserted:
+                inserted += 1
+            else:
+                duplicates += 1
+
+            status = quality_result["status"]
+
+            if status == "VALID":
+                valid_count += 1
+
+                result = detect_anomaly(event)
+
+                if result["is_anomaly"]:
+                    alert_inserted = save_alert(event, result)
+
+                    if alert_inserted:
+                        print(
+                            "POLLUTION ALERT:",
+                            result["alert"],
+                            "| Sensor:",
+                            event["sensor_id"],
+                            "|",
+                            result["message"]
+                        )
+
+            elif status == "SUSPICIOUS":
+                suspicious_count += 1
+
+            else:
+                invalid_count += 1
+
+            # Commit after database processing
+            consumer.commit()
+
+            # Processing latency includes processing and commit
+            completed_at = time.perf_counter()
+
+            processing_latency_ms = (
+                completed_at - message_start
+            ) * 1000
+
+            # Calculate producer-to-consumer latency
+            producer_timestamp = event.get("producer_sent_at_ms")
+
+            end_to_end_latency_ms = None
+
+            if producer_timestamp is not None:
+                try:
+                    end_to_end_latency_ms = (
+                        time.time_ns() / 1_000_000
+                        - float(producer_timestamp)
+                    )
+
+                    if end_to_end_latency_ms < 0:
+                        end_to_end_latency_ms = None
+
+                except (ValueError, TypeError):
+                    end_to_end_latency_ms = None
+
+            # Save actual measurements
+            record_performance(
+                latency_ms=processing_latency_ms,
+                was_duplicate=not was_inserted,
+                quality_status=status,
+                producer_to_consumer_latency_ms=end_to_end_latency_ms
+            )
+
+            # Update rolling throughput
+            recent_completions.append(completed_at)
+
+            while (
+                recent_completions
+                and completed_at - recent_completions[0] > 10
+            ):
+                recent_completions.popleft()
+
+            one_second_count = sum(
+                1 for timestamp in recent_completions
+                if completed_at - timestamp <= 1
+            )
+
+            ten_second_count = len(recent_completions)
+
+            throughput_1s = one_second_count / 1.0
+            throughput_10s = ten_second_count / 10.0
+
+            if processed % 100 == 0:
+
+                elapsed = time.perf_counter() - session_start
+
+                average_throughput = (
+                    processed / elapsed if elapsed > 0 else 0
+                )
+
+                print("\n--- AIRWATCH PERFORMANCE ---")
+                print("Processed:", processed)
+                print("Stored:", inserted)
+                print("Duplicates:", duplicates)
+                print("Valid:", valid_count)
+                print("Suspicious:", suspicious_count)
+                print("Invalid:", invalid_count)
+
+                print(
+                    f"Rolling throughput (1s): "
+                    f"{throughput_1s:.2f} msg/sec"
+                )
+
+                print(
+                    f"Rolling throughput (10s): "
+                    f"{throughput_10s:.2f} msg/sec"
+                )
+
+                print(
+                    f"Session average throughput: "
+                    f"{average_throughput:.2f} msg/sec"
+                )
+
+                print(
+                    f"Processing latency: "
+                    f"{processing_latency_ms:.3f} ms"
+                )
+
+                if end_to_end_latency_ms is not None:
+                    print(
+                        f"Producer-to-consumer latency: "
+                        f"{end_to_end_latency_ms:.3f} ms"
+                    )
+                else:
+                    print(
+                        "Producer-to-consumer latency: "
+                        "Not available for this message"
+                    )
+
+                print("-----------------------------\n")
+
+    except KeyboardInterrupt:
+        print("\nConsumer stopped.")
+
+    finally:
+        elapsed = time.perf_counter() - session_start
+
+        consumer.close()
+
+        print("\nFinal processing summary:")
+        print("Processed:", processed)
+        print("Stored:", inserted)
+        print("Duplicates:", duplicates)
+        print("Valid:", valid_count)
+        print("Suspicious:", suspicious_count)
+        print("Invalid:", invalid_count)
+
+        if elapsed > 0:
+            print(
+                "Session average throughput:",
+                f"{processed / elapsed:.2f} messages/second"
+            )
+
+
+if __name__ == "__main__":
+    start_consumer()
